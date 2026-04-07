@@ -59,14 +59,98 @@ void mem_write_32(uint32_t address, uint32_t value)
 	}
 }
 
+
+
+
+
+
+
+void control_hazard() {
+    // Extract registers from the instruction currently in the ID stage
+    uint8_t rs1 = (IF_ID.IR >> 15) & BIT_MASK_5;
+    uint8_t rs2 = (IF_ID.IR >> 20) & BIT_MASK_5;
+
+    // Extract destination registers from instructions ahead in the pipeline
+    uint8_t rd_ex = (ID_EX.IR >> 7) & BIT_MASK_5;
+    uint8_t rd_mem = (EX_MEM.IR >> 7) & BIT_MASK_5;
+    
+    // Check if the instruction in EX is a LOAD
+    uint8_t opcode_ex = GET_OPCODE(ID_EX.IR);
+
+    bool hazard = false;
+
+	//also check if rs1 or rs2 matches rd_wb (from the MEM_WB register
+	uint8_t rd_wb = (MEM_WB.IR >> 7) & BIT_MASK_5;
+	
+    if (ENABLE_FORWARDING) {
+        // CASE: Forwarding is ON
+        // Only stall for a Load-Use hazard (data not ready until MEM stage)
+        if (opcode_ex == LOAD_OPCODE) {
+            if ((rd_ex != 0) && (rd_ex == rs1 || rd_ex == rs2)) {
+                hazard = true;
+            }
+        }
+    } else {
+        // CASE: Forwarding is OFF
+        // Stall for ANY dependency in EX or MEM stages
+        bool hazard_rs1 = (rs1 != 0) && ((rs1 == rd_ex) || (rs1 == rd_mem));
+        bool hazard_rs2 = (rs2 != 0) && ((rs2 == rd_ex) || (rs2 == rd_mem));
+        
+        if (hazard_rs1 || hazard_rs2) {
+            hazard = true;
+        }
+    }
+
+    if (hazard) {
+        bubble = true;
+        ID_EX.IR = 0;   // Insert NOP to "squash" the next stage
+    } else {
+        bubble = false;
+    }
+}
+//forwarding function
+void forward(){
+	//Forward
+	uint8_t rs1 = (ID_EX.IR >> 15) & BIT_MASK_5;
+	uint8_t rs2 = (ID_EX.IR >> 20) & BIT_MASK_5;
+	uint8_t rd_ex = (ID_EX.IR >> 7) & BIT_MASK_5;
+	uint8_t rd_mem = (EX_MEM.IR >> 7) & BIT_MASK_5;
+
+	if (rd_ex != 0 && rd_ex == rs1) {
+		ID_EX.A = EX_MEM.ALUOutput;
+	}
+	if (rd_ex != 0 && rd_ex == rs2) {
+		ID_EX.B = EX_MEM.ALUOutput;
+	}
+	if (rd_mem != 0 && rd_mem == rs1) {
+		ID_EX.A = MEM_WB.ALUOutput; // Assuming ALUOutput is the value to forward for MEM stage
+	}
+	if (rd_mem != 0 && rd_mem == rs2) {
+		ID_EX.B = MEM_WB.ALUOutput; // Assuming ALUOutput is the value to forward for MEM stage
+	}
+}
+
+
+
 /***************************************************************/
 /* Execute one cycle                                                                                                              */
 /***************************************************************/
+
 void cycle() {
+	control_hazard();
+	if(ENABLE_FORWARDING){
+		forward();
+	}
+	
 	handle_pipeline();
 	NEXT_STATE = CURRENT_STATE;
 	CYCLE_COUNT++;
 }
+
+
+
+
+
 
 /***************************************************************/
 /* Simulate RISCV for n cycles                                                                                       */
@@ -337,9 +421,11 @@ void handle_pipeline()
 	WB();
 	MEM();
 	EX();
-	ID();
+	
 	if(!bubble) {
+		ID();
 		IF();
+		
 	}
 	bubble = false;
 	
@@ -454,12 +540,19 @@ void MEM()
 void EX()
 {
 	uint32_t bincmd = ID_EX.IR;
+	if(bubble){
+		bincmd = 0;
+			EX_MEM.IR = 0;
+		return;
+	}
 	if (!bincmd) { EX_MEM.IR = 0; return; }
 	uint8_t opcode = GET_OPCODE(ID_EX.IR);
 	uint8_t funct3 = GET_FUNCT3(ID_EX.IR);
 	uint8_t funct7 = (ID_EX.IR >> 25) & BIT_MASK_7;
+
 	EX_MEM.IR = ID_EX.IR;
 	EX_MEM.B = ID_EX.B; //pass b for store instructions
+
 	switch(opcode) {
 		case R_OPCODE: {
 			switch(funct3) {
@@ -507,9 +600,13 @@ void EX()
 void ID()
 {
 		uint32_t bincmd = IF_ID.IR;
-		if (!bincmd) return;
+		if (!bincmd){
+				ID_EX.IR = 0;
+return;
+		} ;
 		uint8_t opcode = GET_OPCODE(bincmd);
 		uint8_t rs1 =0, rs2 = 0, rd= 0;
+
 		switch (opcode) {
 			case R_OPCODE: {
 				rd = (IF_ID.IR >> 7) & BIT_MASK_5;
