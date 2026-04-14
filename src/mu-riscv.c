@@ -109,25 +109,48 @@ void control_hazard() {
     }
 }
 //forwarding function
-void forward(){
-	//Forward
-	uint8_t rs1 = (ID_EX.IR >> 15) & BIT_MASK_5;
-	uint8_t rs2 = (ID_EX.IR >> 20) & BIT_MASK_5;
-	uint8_t rd_ex = (ID_EX.IR >> 7) & BIT_MASK_5;
-	uint8_t rd_mem = (EX_MEM.IR >> 7) & BIT_MASK_5;
+// Forwarding function
+void forward() {
+    // 1. Extract source registers from the instruction currently in the EX stage (ID_EX)
+    uint8_t rs1 = (ID_EX.IR >> 15) & BIT_MASK_5;
+    uint8_t rs2 = (ID_EX.IR >> 20) & BIT_MASK_5;
 
-	if (rd_ex != 0 && rd_ex == rs1) {
-		ID_EX.A = EX_MEM.ALUOutput;
-	}
-	if (rd_ex != 0 && rd_ex == rs2) {
-		ID_EX.B = EX_MEM.ALUOutput;
-	}
-	if (rd_mem != 0 && rd_mem == rs1) {
-		ID_EX.A = MEM_WB.ALUOutput; // Assuming ALUOutput is the value to forward for MEM stage
-	}
-	if (rd_mem != 0 && rd_mem == rs2) {
-		ID_EX.B = MEM_WB.ALUOutput; // Assuming ALUOutput is the value to forward for MEM stage
-	}
+    // 2. Extract destination registers from instructions in MEM and WB stages
+    uint8_t rd_mem = (EX_MEM.IR >> 7) & BIT_MASK_5;
+    uint8_t rd_wb = (MEM_WB.IR >> 7) & BIT_MASK_5;
+
+    // 3. Check if instructions in MEM and WB actually write to a register
+    uint8_t opcode_mem = GET_OPCODE(EX_MEM.IR);
+    uint8_t opcode_wb = GET_OPCODE(MEM_WB.IR);
+
+    bool mem_writes = (opcode_mem == R_OPCODE || opcode_mem == IMM_ALU_OPCODE || opcode_mem == LOAD_OPCODE);
+    bool wb_writes = (opcode_wb == R_OPCODE || opcode_wb == IMM_ALU_OPCODE || opcode_wb == LOAD_OPCODE);
+
+    // --- Forwarding for Source A ---
+    // EX Hazard: Data is in the MEM stage (EX_MEM)
+    if (mem_writes && rd_mem != 0 && rd_mem == rs1) {
+        ID_EX.A = EX_MEM.ALUOutput;
+    } 
+    // MEM Hazard: Data is in the WB stage (MEM_WB)
+    else if (wb_writes && rd_wb != 0 && rd_wb == rs1) {
+        if (opcode_wb == LOAD_OPCODE) {
+            ID_EX.A = MEM_WB.LMD; // For loads, data is in LMD
+        } else {
+            ID_EX.A = MEM_WB.ALUOutput;
+        }
+    }
+
+    // --- Forwarding for Source B ---
+    if (mem_writes && rd_mem != 0 && rd_mem == rs2) {
+        ID_EX.B = EX_MEM.ALUOutput;
+    } 
+    else if (wb_writes && rd_wb != 0 && rd_wb == rs2) {
+        if (opcode_wb == LOAD_OPCODE) {
+            ID_EX.B = MEM_WB.LMD;
+        } else {
+            ID_EX.B = MEM_WB.ALUOutput;
+        }
+    }
 }
 
 
