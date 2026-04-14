@@ -573,12 +573,11 @@ void EX()
     uint32_t operandA = ID_EX.A;
     uint32_t operandB = ID_EX.B;
 
-    // ----- Data Forwarding -----
     if (ENABLE_FORWARDING) {
-        uint8_t exmem_rd  = (EX_MEM.IR  >> 7) & BIT_MASK_5;
-        uint8_t memwb_rd  = (MEM_WB.IR  >> 7) & BIT_MASK_5;
-        uint8_t id_ex_rs1 = (ID_EX.IR   >> 15) & BIT_MASK_5;
-        uint8_t id_ex_rs2 = (ID_EX.IR   >> 20) & BIT_MASK_5;
+        uint8_t exmem_rd = (EX_MEM.IR >> 7) & BIT_MASK_5;
+        uint8_t memwb_rd = (MEM_WB.IR >> 7) & BIT_MASK_5;
+        uint8_t id_ex_rs1 = (ID_EX.IR >> 15) & BIT_MASK_5;
+        uint8_t id_ex_rs2 = (ID_EX.IR >> 20) & BIT_MASK_5;
 
         int exmem_regwrite = EX_MEM.IR &&
             (GET_OPCODE(EX_MEM.IR) == R_OPCODE ||
@@ -590,52 +589,46 @@ void EX()
              GET_OPCODE(MEM_WB.IR) == IMM_ALU_OPCODE ||
              GET_OPCODE(MEM_WB.IR) == LOAD_OPCODE);
 
-        // EX/MEM forward (ForwardA = 10)
         if (exmem_regwrite && exmem_rd != 0 && exmem_rd == id_ex_rs1)
             operandA = EX_MEM.ALUOutput;
         else if (memwb_regwrite && memwb_rd != 0 && memwb_rd == id_ex_rs1)
-            // MEM/WB forward (ForwardA = 01) — use LMD for loads, ALUOutput otherwise
             operandA = (GET_OPCODE(MEM_WB.IR) == LOAD_OPCODE) ? MEM_WB.LMD : MEM_WB.ALUOutput;
 
-        // EX/MEM forward (ForwardB = 10)
         if (exmem_regwrite && exmem_rd != 0 && exmem_rd == id_ex_rs2)
             operandB = EX_MEM.ALUOutput;
         else if (memwb_regwrite && memwb_rd != 0 && memwb_rd == id_ex_rs2)
             operandB = (GET_OPCODE(MEM_WB.IR) == LOAD_OPCODE) ? MEM_WB.LMD : MEM_WB.ALUOutput;
-
-        // Keep EX_MEM.B updated with forwarded value for stores
         EX_MEM.B = operandB;
     }
-    // ---------------------------
 
     switch(opcode) {
         case R_OPCODE: {
             switch(funct3) {
-                case 0x0: EX_MEM.ALUOutput = (funct7 == 0x20) ? operandA - operandB : operandA + operandB; break; // ADD/SUB
-                case 0x1: EX_MEM.ALUOutput = operandA << (operandB & 0x1F); break;                                  // SLL
-                case 0x2: EX_MEM.ALUOutput = ((int32_t)operandA < (int32_t)operandB) ? 1 : 0; break;               // SLT
-                case 0x3: EX_MEM.ALUOutput = (operandA < operandB) ? 1 : 0; break;                                  // SLTU
-                case 0x4: EX_MEM.ALUOutput = operandA ^ operandB; break;                                            // XOR
-                case 0x5: EX_MEM.ALUOutput = (funct7 == 0x20)                                                       // SRL/SRA
+                case 0x0: EX_MEM.ALUOutput = (funct7 == 0x20) ? operandA - operandB : operandA + operandB; break; //add/sub
+                case 0x1: EX_MEM.ALUOutput = operandA << (operandB & 0x1F); break; //sll
+                case 0x2: EX_MEM.ALUOutput = ((int32_t)operandA < (int32_t)operandB) ? 1 : 0; break; //slt
+                case 0x3: EX_MEM.ALUOutput = (operandA < operandB) ? 1 : 0; break; //sltu
+                case 0x4: EX_MEM.ALUOutput = operandA ^ operandB; break; //xor
+                case 0x5: EX_MEM.ALUOutput = (funct7 == 0x20) //srl/sra
                     ? (uint32_t)((int32_t)operandA >> (operandB & 0x1F))
                     : operandA >> (operandB & 0x1F); break;
-                case 0x6: EX_MEM.ALUOutput = operandA | operandB; break;                                            // OR
-                case 0x7: EX_MEM.ALUOutput = operandA & operandB; break;                                            // AND
+                case 0x6: EX_MEM.ALUOutput = operandA | operandB; break; //or
+                case 0x7: EX_MEM.ALUOutput = operandA & operandB; break; //and
             }
             break;
         }
         case IMM_ALU_OPCODE: {
             switch(funct3) {
-                case 0x0: EX_MEM.ALUOutput = operandA + ID_EX.imm; break;                                           // ADDI
-                case 0x1: EX_MEM.ALUOutput = operandA << (ID_EX.imm & 0x1F); break;                                 // SLLI
-                case 0x2: EX_MEM.ALUOutput = ((int32_t)operandA < (int32_t)ID_EX.imm) ? 1 : 0; break;              // SLTI
-                case 0x3: EX_MEM.ALUOutput = (operandA < ID_EX.imm) ? 1 : 0; break;                                 // SLTIU
-                case 0x4: EX_MEM.ALUOutput = operandA ^ ID_EX.imm; break;                                           // XORI
-                case 0x5: EX_MEM.ALUOutput = ((ID_EX.imm >> 10) & 0x1)                                              // SRLI/SRAI
+                case 0x0: EX_MEM.ALUOutput = operandA + ID_EX.imm; break; //addi
+                case 0x1: EX_MEM.ALUOutput = operandA << (ID_EX.imm & 0x1F); break; //slli
+                case 0x2: EX_MEM.ALUOutput = ((int32_t)operandA < (int32_t)ID_EX.imm) ? 1 : 0; break; //slti
+                case 0x3: EX_MEM.ALUOutput = (operandA < ID_EX.imm) ? 1 : 0; break; //sltiu
+                case 0x4: EX_MEM.ALUOutput = operandA ^ ID_EX.imm; break; //xori
+                case 0x5: EX_MEM.ALUOutput = ((ID_EX.imm >> 10) & 0x1)  // srli/srai
                     ? (uint32_t)((int32_t)operandA >> (ID_EX.imm & 0x1F))
                     : operandA >> (ID_EX.imm & 0x1F); break;
-                case 0x6: EX_MEM.ALUOutput = operandA | ID_EX.imm; break;                                           // ORI
-                case 0x7: EX_MEM.ALUOutput = operandA & ID_EX.imm; break;                                           // ANDI
+                case 0x6: EX_MEM.ALUOutput = operandA | ID_EX.imm; break;  //ori
+                case 0x7: EX_MEM.ALUOutput = operandA & ID_EX.imm; break;  //andi
             }
             break;
         }
@@ -655,10 +648,9 @@ void ID()
     if (!bincmd) { ID_EX.IR = 0; return; }
     uint8_t opcode = GET_OPCODE(bincmd);
 
-    // BUG FIX: declare rs1/rs2 once at function scope so hazard detection sees them
     uint8_t rs1 = 0, rs2 = 0, rd = 0;
 
-    // First pass: extract rs1/rs2 for hazard detection
+    //first pass. extract rs1/rs2 for hazard detection
     switch (opcode) {
         case R_OPCODE:
             rs1 = (bincmd >> 15) & BIT_MASK_5;
@@ -670,7 +662,7 @@ void ID()
             break;
         case STORE_OPCODE:
             rs1 = (bincmd >> 15) & BIT_MASK_5;
-            rs2 = (bincmd >> 20) & BIT_MASK_5; // BUG FIX: was >> 15
+            rs2 = (bincmd >> 20) & BIT_MASK_5;
             break;
         default:
             break;
@@ -679,10 +671,10 @@ void ID()
     int stall = 0;
 
     if (!ENABLE_FORWARDING) {
-        uint8_t idex_rd  = (ID_EX.IR  >> 7) & BIT_MASK_5;
+        uint8_t idex_rd = (ID_EX.IR  >> 7) & BIT_MASK_5;
         uint8_t exmem_rd = (EX_MEM.IR >> 7) & BIT_MASK_5;
 
-        int idex_regwrite  = ID_EX.IR  && (GET_OPCODE(ID_EX.IR)  == R_OPCODE || GET_OPCODE(ID_EX.IR)  == IMM_ALU_OPCODE || GET_OPCODE(ID_EX.IR)  == LOAD_OPCODE);
+        int idex_regwrite = ID_EX.IR  && (GET_OPCODE(ID_EX.IR) == R_OPCODE || GET_OPCODE(ID_EX.IR) == IMM_ALU_OPCODE || GET_OPCODE(ID_EX.IR) == LOAD_OPCODE);
         int exmem_regwrite = EX_MEM.IR && (GET_OPCODE(EX_MEM.IR) == R_OPCODE || GET_OPCODE(EX_MEM.IR) == IMM_ALU_OPCODE || GET_OPCODE(EX_MEM.IR) == LOAD_OPCODE);
 
         if (idex_regwrite && idex_rd != 0) {
@@ -694,7 +686,6 @@ void ID()
                 stall = 1;
         }
     } else {
-        // With forwarding: only stall for load-use hazard (1 cycle unavoidable)
         uint8_t idex_rd = (ID_EX.IR >> 7) & BIT_MASK_5;
         int idex_is_load = ID_EX.IR && (GET_OPCODE(ID_EX.IR) == LOAD_OPCODE);
         if (idex_is_load && idex_rd != 0) {
@@ -704,33 +695,33 @@ void ID()
     }
 
     if (stall) {
-        ID_EX.IR  = 0;
-        ID_EX.A   = 0;
-        ID_EX.B   = 0;
+        ID_EX.IR = 0;
+        ID_EX.A = 0;
+        ID_EX.B = 0;
         ID_EX.imm = 0;
         bubble = true;
         return;
     }
 
-    // No hazard — decode and populate ID/EX register
+    //if no hazard
     switch (opcode) {
         case R_OPCODE: {
-            rd  = (bincmd >> 7)  & BIT_MASK_5;
+            rd = (bincmd >> 7) & BIT_MASK_5;
             rs1 = (bincmd >> 15) & BIT_MASK_5;
             rs2 = (bincmd >> 20) & BIT_MASK_5;
-            ID_EX.IR  = IF_ID.IR;
-            ID_EX.A   = CURRENT_STATE.REGS[rs1];
-            ID_EX.B   = CURRENT_STATE.REGS[rs2];
+            ID_EX.IR = IF_ID.IR;
+            ID_EX.A = CURRENT_STATE.REGS[rs1];
+            ID_EX.B = CURRENT_STATE.REGS[rs2];
             ID_EX.imm = 0;
             break;
         }
         case IMM_ALU_OPCODE: {
             uint32_t imm = (IF_ID.IR >> 20) & BIT_MASK_12;
-            if (imm & 0x800) imm |= 0xFFFFF000; // sign extend
+            if (imm & 0x800) imm |= 0xFFFFF000; //sign extend
             rs1 = (IF_ID.IR >> 15) & BIT_MASK_5;
-            ID_EX.IR  = IF_ID.IR;
-            ID_EX.A   = CURRENT_STATE.REGS[rs1];
-            ID_EX.B   = 0;
+            ID_EX.IR= IF_ID.IR;
+            ID_EX.A = CURRENT_STATE.REGS[rs1];
+            ID_EX.B = 0;
             ID_EX.imm = imm;
             break;
         }
@@ -738,22 +729,22 @@ void ID()
             uint32_t imm = (IF_ID.IR >> 20) & BIT_MASK_12;
             if (imm & 0x800) imm |= 0xFFFFF000;
             rs1 = (IF_ID.IR >> 15) & BIT_MASK_5;
-            ID_EX.IR  = IF_ID.IR;
-            ID_EX.A   = CURRENT_STATE.REGS[rs1];
-            ID_EX.B   = 0;
+            ID_EX.IR= IF_ID.IR;
+            ID_EX.A= CURRENT_STATE.REGS[rs1];
+            ID_EX.B = 0;
             ID_EX.imm = imm;
             break;
         }
         case STORE_OPCODE: {
-            uint8_t imm4  = (IF_ID.IR >> 7)  & BIT_MASK_5;
+            uint8_t imm4 = (IF_ID.IR >> 7)  & BIT_MASK_5;
             uint8_t imm11 = (IF_ID.IR >> 25) & BIT_MASK_7;
-            uint32_t imm  = (imm11 << 5) | imm4;
+            uint32_t imm = (imm11 << 5) | imm4;
             if (imm & 0x800) imm |= 0xFFFFF000;
             rs1 = (IF_ID.IR >> 15) & BIT_MASK_5;
-            rs2 = (IF_ID.IR >> 20) & BIT_MASK_5; // BUG FIX: was >> 15
-            ID_EX.IR  = IF_ID.IR;
-            ID_EX.A   = CURRENT_STATE.REGS[rs1];
-            ID_EX.B   = CURRENT_STATE.REGS[rs2];
+            rs2 = (IF_ID.IR >> 20) & BIT_MASK_5;
+            ID_EX.IR = IF_ID.IR;
+            ID_EX.A= CURRENT_STATE.REGS[rs1];
+            ID_EX.B = CURRENT_STATE.REGS[rs2];
             ID_EX.imm = imm;
             break;
         }
@@ -762,7 +753,7 @@ void ID()
             ID_EX.IR = IF_ID.IR;
             break;
         default:
-            printf("Unknown command\n"); // BUG FIX: was print(...)
+            printf("Unknown command\n");
             break;
     }
 } 
